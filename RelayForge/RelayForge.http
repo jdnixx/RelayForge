@@ -1,0 +1,6 @@
+@RelayForge_HostAddress = http://localhost:5283
+
+GET {{RelayForge_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
