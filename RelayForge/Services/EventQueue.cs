@@ -16,21 +16,27 @@ public class EventQueue
     public async Task<Event?> GetNextPendingEventAsync(
         CancellationToken cancellationToken = default)
     {
-        var nextEvent = await _dbContext.Events
-            .Where(e => e.Status == "Pending")
-            .OrderBy(e => e.CreatedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
+        var now = DateTime.UtcNow;
 
-        if (nextEvent is null) return null;
-        
-        nextEvent.Status = "Processing";
-        nextEvent.Attempts++;
-        nextEvent.LastAttemptAtUtc = DateTime.UtcNow;
-        
-        _dbContext.Update(nextEvent);
-        
-        await  _dbContext.SaveChangesAsync(cancellationToken);
-        
-        return nextEvent;
+        var claimedEvents = await _dbContext.Events
+            .FromSqlInterpolated($"""
+                                  UPDATE Events
+                                  SET Status = 'Processing',
+                                      Attempts = Attempts + 1,
+                                      LastAttemptAtUtc = {now}
+                                  WHERE Id = (
+                                      SELECT Id
+                                      FROM Events
+                                      WHERE Status = 'Pending'
+                                      ORDER BY CreatedAtUtc
+                                      LIMIT 1
+                                  )
+                                  AND Status = 'Pending'
+                                  RETURNING *;
+                                  """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return claimedEvents.SingleOrDefault();
     }
 }
