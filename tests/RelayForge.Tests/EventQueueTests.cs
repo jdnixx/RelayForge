@@ -44,4 +44,38 @@ public class EventQueueTests
         Assert.Equal(1, result.Attempts);
         Assert.NotNull(result.LastAttemptAtUtc);
     }
+
+    [Fact]
+    public async Task GetNextPendingEvent_ConcurrentCalls_DoNotClaimSameEvent()
+    {
+        //Arrange
+        using var factory = new RelayForgeFactory();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+
+            db.Events.Add(new Event()
+            {
+                Id = Guid.NewGuid(),
+                CreatedAtUtc = DateTime.UtcNow,
+                Status = "Pending"
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var tasks = Enumerable.Range(0, 2).Select(async _ =>
+        {
+            using var scope = factory.Services.CreateScope();
+            var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+            return await queue.GetNextPendingEventAsync();
+        });
+
+        var results = await Task.WhenAll(tasks);
+        
+        // Assert
+        Assert.Single(results.Where(e => e is not null));
+    }
 }
