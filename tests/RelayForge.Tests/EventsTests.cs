@@ -68,4 +68,37 @@ public class EventsTests
         
         Assert.Equal(0, await db.Events.CountAsync());
     }
+
+    [Fact]
+    public async Task PostEvent_ConcurrentRequests_AllEventsArePersisted()
+    {
+        // Arrange
+        using var factory = new RelayForgeFactory();
+        using var client = factory.CreateClient();
+
+        const int requestCount = 20;
+
+        // Act
+        var tasks = Enumerable.Range(0, requestCount)
+            .Select(i => client.PostAsJsonAsync("/api/events", new
+            {
+                destinationUrl = "http://localhost:5099/webhooks/test",
+                payload = new
+                {
+                    type = "order.created",
+                    orderId = $"order-{i}"
+                }
+            }));
+        
+        var responses = await Task.WhenAll(tasks);
+        
+        // Assert
+        Assert.All(responses, response => 
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode));
+        
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        
+        Assert.Equal(requestCount, db.Events.Count());
+    }
 }
