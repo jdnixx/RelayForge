@@ -9,6 +9,6 @@ public class Event
     
     public string Status { get; set; } = "Pending";
     public int Attempts { get; set; } = 0;
-    public DateTime LastAttemptAtUtc { get; set; }
-    public DateTime NextAttemptAtUtc { get; set; }
+    public DateTime? LastAttemptAtUtc { get; set; }
+    public DateTime? NextAttemptAtUtc { get; set; }
 }

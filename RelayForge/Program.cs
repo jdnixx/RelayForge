@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RelayForge.Data;
+using RelayForge.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,7 @@ builder.Services.AddOpenApi();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<RelayForgeDbContext>(options =>
     options.UseSqlite(connectionString));
+builder.Services.AddScoped<EventQueue>();
 
 var app = builder.Build();
 
