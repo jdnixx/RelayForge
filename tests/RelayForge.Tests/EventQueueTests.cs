@@ -183,4 +183,60 @@ public class EventQueueTests
         Assert.Equal("Processing", result.Status);
         Assert.Equal(2, result.Attempts);
     }
+    
+    [Fact]
+    public async Task MarkAsFailed_PermanentlyFailsEventAfterMaxAttempts()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        var failedEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            Status = "Processing",
+            Attempts = 5
+        };
+
+        db.Events.Add(failedEvent);
+        await db.SaveChangesAsync();
+
+        await queue.MarkAsFailedAsync(failedEvent.Id);
+
+        Assert.Equal("PermanentlyFailed", failedEvent.Status);
+        Assert.Null(failedEvent.NextAttemptAtUtc);
+    }
+    
+    [Fact]
+    public async Task MarkAsFailed_SchedulesRetryBeforeMaxAttempts()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        var failedEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            Status = "Processing",
+            Attempts = 4
+        };
+
+        db.Events.Add(failedEvent);
+        await db.SaveChangesAsync();
+
+        var before = DateTime.UtcNow;
+
+        await queue.MarkAsFailedAsync(failedEvent.Id);
+
+        var after = DateTime.UtcNow;
+
+        Assert.Equal("Failed", failedEvent.Status);
+        Assert.NotNull(failedEvent.NextAttemptAtUtc);
+        Assert.True(failedEvent.NextAttemptAtUtc > before);
+        Assert.True(failedEvent.NextAttemptAtUtc < after.AddHours(2));
+    }
 }

@@ -64,14 +64,23 @@ public class EventQueue
         
         if (failedEvent == null) return;
         
-        var exponentialDelaySeconds = 5 * Math.Pow(2, failedEvent.Attempts-1);
-        var cappedDelaySeconds = Math.Min(exponentialDelaySeconds, 3600);
-
-        var jitterMultiplier = Random.Shared.NextDouble() * 0.4 + 0.8;
-        var delay = TimeSpan.FromSeconds(cappedDelaySeconds * jitterMultiplier);
-
-        failedEvent.Status = "Failed";
-        failedEvent.NextAttemptAtUtc =  DateTime.UtcNow.Add(delay);
+        if (failedEvent.Attempts >= 5)
+        {
+            failedEvent.Status = "PermanentlyFailed";
+        }
+        else
+        {
+            var exponentialDelaySeconds = 5 * Math.Pow(2, failedEvent.Attempts-1);
+            var cappedDelaySeconds = Math.Min(exponentialDelaySeconds, 3600);
+    
+            var jitterMultiplier = Random.Shared.NextDouble() * 0.4 + 0.8;
+            var delay = TimeSpan.FromSeconds(cappedDelaySeconds * jitterMultiplier);
+    
+            failedEvent.Status = "Failed";
+            failedEvent.NextAttemptAtUtc =  DateTime.UtcNow.Add(delay);
+        }
+        
+        
 
         await _dbContext.SaveChangesAsync();
     }
