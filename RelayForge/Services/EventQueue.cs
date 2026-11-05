@@ -28,10 +28,13 @@ public class EventQueue
                                       SELECT Id
                                       FROM Events
                                       WHERE Status = 'Pending'
+                                      OR (Status = 'Failed' AND NextAttemptAtUtc <= {now})
                                       ORDER BY CreatedAtUtc
                                       LIMIT 1
                                   )
-                                  AND Status = 'Pending'
+                                  AND (Status = 'Pending'
+                                    OR (Status = 'Failed' AND NextAttemptAtUtc <= {now})
+                                  )
                                   RETURNING *;
                                   """)
             .AsNoTracking()
@@ -60,8 +63,15 @@ public class EventQueue
             .FirstOrDefaultAsync(e=> e.Id == eventId, cancellationToken);
         
         if (failedEvent == null) return;
+        
+        var exponentialDelaySeconds = 5 * Math.Pow(2, failedEvent.Attempts-1);
+        var cappedDelaySeconds = Math.Min(exponentialDelaySeconds, 3600);
+
+        var jitterMultiplier = Random.Shared.NextDouble() * 0.4 + 0.8;
+        var delay = TimeSpan.FromSeconds(cappedDelaySeconds * jitterMultiplier);
 
         failedEvent.Status = "Failed";
+        failedEvent.NextAttemptAtUtc =  DateTime.UtcNow.Add(delay);
 
         await _dbContext.SaveChangesAsync();
     }

@@ -116,7 +116,8 @@ public class EventQueueTests
         {
             Id = Guid.NewGuid(),
             CreatedAtUtc = DateTime.UtcNow,
-            Status = "Processing"
+            Status = "Processing",
+            Attempts = 1
         };
 
         db.Events.Add(newEvent);
@@ -125,5 +126,7 @@ public class EventQueueTests
         await queue.MarkAsFailedAsync(newEvent.Id);
 
         Assert.Equal("Failed", newEvent.Status);
+        Assert.NotNull(newEvent.NextAttemptAtUtc);
+        Assert.True(newEvent.NextAttemptAtUtc >  DateTime.UtcNow);
     }
 }
