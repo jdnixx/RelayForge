@@ -129,4 +129,58 @@ public class EventQueueTests
         Assert.NotNull(newEvent.NextAttemptAtUtc);
         Assert.True(newEvent.NextAttemptAtUtc >  DateTime.UtcNow);
     }
+    
+    [Fact]
+    public async Task GetNextPendingEvent_DoesNotClaimFailedEventBeforeRetryTime()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        db.Events.Add(new Event
+        {
+            Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            Status = "Failed",
+            Attempts = 1,
+            NextAttemptAtUtc = DateTime.UtcNow.AddMinutes(5)
+        });
+
+        await db.SaveChangesAsync();
+
+        var result = await queue.GetNextPendingEventAsync();
+
+        Assert.Null(result);
+    }
+    
+    [Fact]
+    public async Task GetNextPendingEvent_ClaimsFailedEventAfterRetryTime()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        var failedEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            Status = "Failed",
+            Attempts = 1,
+            NextAttemptAtUtc = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        db.Events.Add(failedEvent);
+        await db.SaveChangesAsync();
+
+        var result = await queue.GetNextPendingEventAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal(failedEvent.Id, result.Id);
+        Assert.Equal("Processing", result.Status);
+        Assert.Equal(2, result.Attempts);
+    }
 }
