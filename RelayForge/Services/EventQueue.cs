@@ -39,4 +39,30 @@ public class EventQueue
 
         return claimedEvents.SingleOrDefault();
     }
+
+    public async Task MarkAsDeliveredAsync(Guid eventId,
+        CancellationToken cancellationToken = default)
+    {
+        var deliveryEvent = await _dbContext.Events
+            .FirstOrDefaultAsync(e=> e.Id == eventId, cancellationToken);
+
+        if (deliveryEvent == null) return;
+
+        deliveryEvent.Status = "Delivered";
+
+        await _dbContext.SaveChangesAsync();
+    }
+    
+    public async Task MarkAsFailedAsync(Guid eventId,
+        CancellationToken cancellationToken = default)
+    {
+        var failedEvent = await _dbContext.Events
+            .FirstOrDefaultAsync(e=> e.Id == eventId, cancellationToken);
+        
+        if (failedEvent == null) return;
+
+        failedEvent.Status = "Failed";
+
+        await _dbContext.SaveChangesAsync();
+    }
 }

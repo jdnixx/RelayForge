@@ -33,10 +33,10 @@ namespace RelayForge.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("LastAttemptAtUtc")
+                    b.Property<DateTime?>("LastAttemptAtUtc")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime>("NextAttemptAtUtc")
+                    b.Property<DateTime?>("NextAttemptAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PayloadJson")

@@ -78,4 +78,52 @@ public class EventQueueTests
         // Assert
         Assert.Single(results.Where(e => e is not null));
     }
+
+    [Fact]
+    public async Task MarkAsDelivered_ChangesEventStatus()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+        
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        var newEvent = new Event()
+        {
+            Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow,
+            Status = "Processing"
+        };
+        
+        db.Events.AddRange(newEvent);
+        await db.SaveChangesAsync();
+
+        await queue.MarkAsDeliveredAsync(newEvent.Id);
+        
+        Assert.Equal("Delivered", newEvent.Status);
+    }
+    
+    [Fact]
+    public async Task MarkAsFailed_ChangesEventStatus()
+    {
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+
+        var newEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow,
+            Status = "Processing"
+        };
+
+        db.Events.Add(newEvent);
+        await db.SaveChangesAsync();
+
+        await queue.MarkAsFailedAsync(newEvent.Id);
+
+        Assert.Equal("Failed", newEvent.Status);
+    }
 }
