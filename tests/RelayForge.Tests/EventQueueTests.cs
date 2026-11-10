@@ -334,4 +334,45 @@ public class EventQueueTests
             Assert.Equal(evt.Status, result.Status);
         }
     }
+
+    [Fact]
+    public async Task GetNextPendingEventAsync_ConcurrentCallsClaimUniqueEvents()
+    {
+        // Arrange
+        using var factory = new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+        
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        
+        var events = Enumerable.Range(0, 20)
+            .Select(_ => new Event
+            {
+                Id = Guid.NewGuid(),
+                Status = "Pending",
+                CreatedAtUtc = DateTime.UtcNow
+            })
+            .ToList();
+
+        await db.Events.AddRangeAsync(events);
+        await db.SaveChangesAsync();
+        
+        // Act
+        var tasks = Enumerable.Range(0, 20)
+            .Select(async _ =>
+            {
+                using var taskScope = factory.Services.CreateScope();
+                var taskQueue = taskScope.ServiceProvider.GetRequiredService<EventQueue>();
+
+                var claimedEvent = await taskQueue.GetNextPendingEventAsync();
+
+                return claimedEvent?.Id;
+            });
+
+        var results = await Task.WhenAll(tasks);
+        
+        // Assert
+        Assert.Equal(20, results.Length);
+        Assert.All(results, id => Assert.NotNull(id));
+        Assert.Equal(20, results.Distinct().Count());
+    }
 }
