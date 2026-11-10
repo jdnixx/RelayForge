@@ -17,6 +17,7 @@ builder.Services.AddDbContext<RelayForgeDbContext>(options =>
 builder.Services.AddScoped<EventQueue>();
 builder.Services.AddHostedService<DeliveryWorker>();
 builder.Services.AddHttpClient();
+builder.Services.AddHostedService<EventRecoveryWorker>();
 
 var app = builder.Build();
 

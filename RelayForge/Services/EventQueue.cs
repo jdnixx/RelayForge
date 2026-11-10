@@ -43,6 +43,17 @@ public class EventQueue
         return claimedEvents.SingleOrDefault();
     }
 
+    public async Task RecoverStaleEventAsync(CancellationToken cancellationToken = default)
+    {
+        var cutoff = DateTime.UtcNow.AddSeconds(-60);
+        
+        await _dbContext.Events
+            .Where(e => e.Status == "Processing" 
+                        && e.LastAttemptAtUtc <= cutoff)
+            .ExecuteUpdateAsync(setters =>
+                setters.SetProperty(e => e.Status, "Pending"));
+    }
+
     public async Task MarkAsDeliveredAsync(Guid eventId,
         CancellationToken cancellationToken = default)
     {
@@ -52,8 +63,9 @@ public class EventQueue
         if (deliveryEvent == null) return;
 
         deliveryEvent.Status = "Delivered";
+        deliveryEvent.NextAttemptAtUtc = null;
 
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
     
     public async Task MarkAsFailedAsync(Guid eventId,
@@ -67,6 +79,7 @@ public class EventQueue
         if (failedEvent.Attempts >= 5)
         {
             failedEvent.Status = "PermanentlyFailed";
+            failedEvent.NextAttemptAtUtc = null;
         }
         else
         {
@@ -80,8 +93,6 @@ public class EventQueue
             failedEvent.NextAttemptAtUtc =  DateTime.UtcNow.Add(delay);
         }
         
-        
-
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

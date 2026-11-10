@@ -43,15 +43,20 @@ public class DeliveryWorker : BackgroundService
             {
                 using var content = new StringContent(nextEvent.PayloadJson,
                     Encoding.UTF8, "application/json");
-                
-                var response  = await _httpClient.PostAsync(nextEvent.DestinationUrl,
-                    content,  stoppingToken);
-                
+
+                using var response = await _httpClient.PostAsync(nextEvent.DestinationUrl,
+                    content, stoppingToken);
+
                 response.EnsureSuccessStatusCode();
-                
-                await queue.MarkAsDeliveredAsync(nextEvent.Id,  stoppingToken);
-                
-                _logger.LogInformation("Successfully delivered event {EventId}.",  nextEvent.Id);
+
+                await queue.MarkAsDeliveredAsync(nextEvent.Id, stoppingToken);
+
+                _logger.LogInformation("Successfully delivered event {EventId}.", nextEvent.Id);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Don't mark as failed for normal application shutdowns
+                throw;
             }
             catch (Exception e)
             {

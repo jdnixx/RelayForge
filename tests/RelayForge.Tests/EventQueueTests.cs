@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RelayForge.Data;
 using RelayForge.Models;
@@ -238,5 +239,99 @@ public class EventQueueTests
         Assert.NotNull(failedEvent.NextAttemptAtUtc);
         Assert.True(failedEvent.NextAttemptAtUtc > before);
         Assert.True(failedEvent.NextAttemptAtUtc < after.AddHours(2));
+    }
+    
+    [Fact]
+    public async Task RecoverStaleEvents_ResetsStaleProcessingEventsToPending()
+    {
+        using var factory =  new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+        
+        // Arrange
+        var staleEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            Status = "Processing",
+            LastAttemptAtUtc = DateTime.UtcNow.AddMinutes(-2)
+        };
+
+        await db.Events.AddAsync(staleEvent);
+        await db.SaveChangesAsync();
+
+        // Act
+        await queue.RecoverStaleEventAsync();
+
+        // Assert
+        var recoveredEvent = await db.Events
+            .AsNoTracking()
+            .SingleAsync(e => e.Id == staleEvent.Id);
+
+        Assert.Equal("Pending", recoveredEvent.Status);
+    }
+    
+    [Fact]
+    public async Task RecoverStaleEvents_DoesNotResetRecentProcessingEvents()
+    {
+        using var factory =  new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+        
+        // Arrange
+        var recentEvent = new Event
+        {
+            Id = Guid.NewGuid(),
+            Status = "Processing",
+            LastAttemptAtUtc = DateTime.UtcNow.AddSeconds(-30)
+        };
+
+        await db.Events.AddAsync(recentEvent);
+        await db.SaveChangesAsync();
+
+        // Act
+        await queue.RecoverStaleEventAsync();
+
+        // Assert
+        var result = await db.Events
+            .AsNoTracking()
+            .SingleAsync(e => e.Id == recentEvent.Id);
+
+        Assert.Equal("Processing", result.Status);
+    }
+    
+    [Fact]
+    public async Task RecoverStaleEvents_DoesNotChangeOtherStatuses()
+    {
+        using var factory =  new RelayForgeFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();
+        var queue = scope.ServiceProvider.GetRequiredService<EventQueue>();
+        
+        // Arrange
+        var events = new[]
+        {
+            new Event { Id = Guid.NewGuid(), Status = "Pending" },
+            new Event { Id = Guid.NewGuid(), Status = "Failed" },
+            new Event { Id = Guid.NewGuid(), Status = "Delivered" },
+            new Event { Id = Guid.NewGuid(), Status = "PermanentlyFailed" }
+        };
+
+        await db.Events.AddRangeAsync(events);
+        await db.SaveChangesAsync();
+
+        // Act
+        await queue.RecoverStaleEventAsync();
+
+        // Assert
+        foreach (var evt in events)
+        {
+            var result = await db.Events
+                .AsNoTracking()
+                .SingleAsync(e => e.Id == evt.Id);
+
+            Assert.Equal(evt.Status, result.Status);
+        }
     }
 }
