@@ -339,7 +339,8 @@ public class EventQueueTests
     public async Task GetNextPendingEventAsync_ConcurrentCallsClaimUniqueEvents()
     {
         // Arrange
-        using var factory = new RelayForgeFactory();
+        // this specifically tests background services, so turn true
+        using var factory = new RelayForgeFactory(true);
         using var scope = factory.Services.CreateScope();
         
         var db = scope.ServiceProvider.GetRequiredService<RelayForgeDbContext>();

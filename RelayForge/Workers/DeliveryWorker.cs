@@ -8,6 +8,8 @@ public class DeliveryWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly HttpClient _httpClient;
     private readonly ILogger<DeliveryWorker> _logger;
+    
+    private readonly int _workerCount = 10;
 
     public DeliveryWorker(
         IServiceScopeFactory scopeFactory,
@@ -20,6 +22,14 @@ public class DeliveryWorker : BackgroundService
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var workers = Enumerable.Range(0, _workerCount)
+            .Select(_ => ProcessEventsAsync(stoppingToken));
+
+        await Task.WhenAll(workers);
+    }
+
+    private async Task ProcessEventsAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Delivery worker started.");
 
